@@ -39,6 +39,7 @@ from book_maker.translator.claude_translator import Claude
 from book_maker.translator.codex_translator import Codex
 from book_maker.translator.gemini_translator import Gemini
 from book_maker.translator.google_translator import Google
+from book_maker.translator.output_validation import TRANSLATION_OUTPUT_CONTRACT
 from book_maker.utils import prompt_config_to_kwargs
 
 USER = "Render `{text}` into {language}."
@@ -237,7 +238,10 @@ class TestTheStyleSectionStandsOverTheRun:
 
     def test_it_sits_after_the_system_message_not_over_it(self):
         standing = _openai(prompt_sys_msg=SYSTEM, style_note=STYLE)
-        assert standing.standing_instructions() == f"{SYSTEM}\n\n{self.STANDING}"
+        assert (
+            standing.standing_instructions()
+            == f"{SYSTEM}\n\n{TRANSLATION_OUTPUT_CONTRACT}\n\n{self.STANDING}"
+        )
 
     @pytest.mark.parametrize("build", [_openai, _claude, _gemini])
     def test_no_style_adds_nothing(self, build):
@@ -260,7 +264,9 @@ class TestARouteWithNoStandingChannelFoldsIntoTheTurn:
     def test_the_standing_text_goes_in_front_of_the_turn(self):
         route = self._folding(prompt_sys_msg=SYSTEM, style_note=STYLE)
         content = route._user_content("Some prose.")
-        assert content.startswith(f"{SYSTEM}\n\n{ChatGPTAPI.STYLE_HEADING} {STYLE}\n\n")
+        assert content.startswith(
+            f"{SYSTEM}\n\n{TRANSLATION_OUTPUT_CONTRACT}\n\n{ChatGPTAPI.STYLE_HEADING} {STYLE}\n\n"
+        )
         assert content.endswith("Render `Some prose.` into simplified chinese.")
 
     def test_the_channel_is_then_empty_rather_than_saying_it_twice(self):
@@ -269,10 +275,11 @@ class TestARouteWithNoStandingChannelFoldsIntoTheTurn:
         messages = route.create_messages("Some prose.")
         assert sum(m["content"].count(SYSTEM) for m in messages) == 1
 
-    def test_nothing_standing_leaves_the_turn_alone(self):
+    def test_without_custom_instructions_the_output_contract_still_folds(self):
         assert (
             self._folding()._user_content("Some prose.")
-            == "Render `Some prose.` into simplified chinese."
+            == TRANSLATION_OUTPUT_CONTRACT
+            + "\n\nRender `Some prose.` into simplified chinese."
         )
 
 
@@ -284,7 +291,7 @@ class TestTheSystemSectionKeepsItsNativeSlot:
     def test_the_openai_user_message_does_not_repeat_the_system_message(self):
         route = _openai(prompt_sys_msg=SYSTEM)
         messages = route.create_messages("Some prose.")
-        assert messages[0]["content"] == SYSTEM
+        assert messages[0]["content"] == SYSTEM + "\n\n" + TRANSLATION_OUTPUT_CONTRACT
         assert SYSTEM not in messages[-1]["content"]
 
     def test_the_claude_system_message_is_the_section(self):
@@ -292,12 +299,14 @@ class TestTheSystemSectionKeepsItsNativeSlot:
         assert SYSTEM not in _claude(prompt_sys_msg=SYSTEM)._user_content("x")
 
     def test_the_gemini_system_instruction_is_the_section(self):
-        assert _gemini(prompt_sys_msg=SYSTEM)._system_instruction() == SYSTEM
+        assert (
+            _gemini(prompt_sys_msg=SYSTEM)._system_instruction()
+            == SYSTEM + "\n\n" + TRANSLATION_OUTPUT_CONTRACT
+        )
         assert SYSTEM not in _gemini(prompt_sys_msg=SYSTEM)._user_content("x")
 
-    def test_gemini_sends_no_empty_system_instruction(self):
-        # the SDK takes an absent instruction; "" is a different request
-        assert _gemini()._system_instruction() is None
+    def test_gemini_keeps_output_contract_without_custom_system(self):
+        assert _gemini()._system_instruction() == TRANSLATION_OUTPUT_CONTRACT
 
 
 class TestARouteWithoutASystemSlotAppendsIt:

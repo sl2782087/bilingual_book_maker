@@ -30,6 +30,7 @@ from ..codex_client import (
     CodexQuotaExhausted,
     CodexTurnFailed,
 )
+from ..reference_context import reference_preamble
 from ..glossary import Glossary
 from ..session_context import (
     WindowText,
@@ -155,6 +156,8 @@ class Codex(Base):
 
     # The thread is the history: a turn is appended to it and the window
     # rolls over into a handoff turn like any other session route.
+    SUPPORTS_REFERENCE_CONTEXT = True
+
     SUPPORTS_SESSION_CONTEXT = True
 
     # And it is one whether or not `--use_context session` was passed: there
@@ -532,13 +535,15 @@ class Codex(Base):
             # than with the thread instructions, which every later turn would
             # re-read.
             block = self.glossary.prompt_block(text) if self.glossary else ""
-            payload = self._unit_text(text)
+            payload = reference_preamble(text) + self._unit_text(text)
             payload = f"{block}\n\n{payload}" if block else payload
 
             translated = self._run_turn(thread_id, payload)
             self._report_quota()
 
-            self._window_tokens += estimate_tokens(text) + estimate_tokens(translated)
+            self._window_tokens += estimate_tokens(payload) + estimate_tokens(
+                translated
+            )
             # The thread itself lives in the sidecar, so this is the only
             # copy of the window's text on our side — and grounding a
             # harvested rendering needs one. Cleared on every rollover, so

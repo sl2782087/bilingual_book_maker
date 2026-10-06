@@ -1686,6 +1686,14 @@ def build_parser():
     translate_format_list = list(FORMAT_DICT.keys())
     # No prefix abbreviation: `--model` must not resolve to `--model_list`.
     parser = argparse.ArgumentParser(allow_abbrev=False)
+    from book_maker.reference_context import REFERENCE_CONTEXT_VERSION
+
+    parser.add_argument(
+        "--reference-context-version",
+        action="version",
+        version=REFERENCE_CONTEXT_VERSION,
+        help="Print the EPUB reference/handoff protocol without model calls",
+    )
     parser.add_argument(
         "--book_name",
         dest="book_name",

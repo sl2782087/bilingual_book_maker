@@ -785,3 +785,9 @@ Thank you, that's enough.
 
 [^token]: You can get a token from [OpenAI](https://platform.openai.com/account/api-keys) or [Anthropic](https://console.anthropic.com/account/api-keys).
 [^black]: https://github.com/psf/black
+
+### EPUB reference context and proofreading handoff
+
+`--reference-context-version` prints the reference/handoff protocol and exits without model calls. Plan-mode translation supplies bounded ruby readings and resolvable local footnotes separately from body text on Codex, OpenAI-compatible, Claude and Gemini routes. External links and ordinary chapter jumps are not footnotes. Ambiguous/missing/truncated references are recorded for editorial review. Fixed machine-translation routes retain this information in the handoff but do not use it in requests.
+
+A completed plan-mode EPUB writes an adjacent `.review.json` with source/output hashes, stable source-unit IDs, original text, translated text and reference data. This file contains book text: keep it outside the EPUB and do not commit or publish it automatically. It covers selected translation units only, not a semantic review of the whole book. Existing resume fingerprints change with the new context policy; finish active runs with their original installation before upgrading.

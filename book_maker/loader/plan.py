@@ -1100,6 +1100,7 @@ class Unit:
     # `text`. Empty for the ordinary unit; the write-back replaces each token
     # with a clone of its element.
     markers: dict = field(default_factory=dict)
+    references: dict = field(default_factory=dict)
 
     @property
     def key(self):
@@ -1650,7 +1651,12 @@ def unit_tokens(unit):
     mode, which counts the same way.
     """
     if unit.token_count is None:
-        unit.token_count = num_tokens_from_text(unit.text)
+        from book_maker.reference_context import reference_preamble, reference_scope
+
+        with reference_scope([unit]):
+            unit.token_count = num_tokens_from_text(
+                unit.text + reference_preamble(unit.text)
+            )
     return unit.token_count
 
 
