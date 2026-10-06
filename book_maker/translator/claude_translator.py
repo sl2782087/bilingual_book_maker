@@ -165,6 +165,8 @@ class Claude(Base):
         "and provide only the translated result.\n```{text}```"
     )
 
+    SUPPORTS_REFERENCE_CONTEXT = True
+
     SUPPORTS_SESSION_CONTEXT = True
     SUPPORTS_PARALLEL_CONTEXT = True
     SUPPORTS_REQUEST_EXTRAS = True

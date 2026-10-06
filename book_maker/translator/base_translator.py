@@ -9,6 +9,7 @@ from pathlib import Path
 from rich import print
 from rich.markup import escape
 
+from ..reference_context import reference_preamble
 from ..glossary import Glossary
 from ..redaction import redact, remember
 from ..session_context import (
@@ -283,6 +284,8 @@ class Base(ABC):
     # history, compacted into a handoff report at --context-compact-at? A
     # format that does not gets the flag refused rather than accepting it
     # and translating as if it had never been passed.
+    SUPPORTS_REFERENCE_CONTEXT = False
+
     SUPPORTS_SESSION_CONTEXT = False
 
     # Is this format a session whether or not anyone asked for one? True
@@ -984,6 +987,7 @@ class Base(ABC):
             self._marker_preamble(request_text)
             + self._structure_preamble(request_text, batched)
             + continuity
+            + reference_preamble(request_text)
         )
 
     def warn_if_extras_refused(self, error):

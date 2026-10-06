@@ -25,6 +25,8 @@ from rich import print
 from rich.markup import escape
 from tqdm import tqdm
 
+from book_maker.reference_context import REFERENCE_CONTEXT_VERSION, reference_scope
+from .references import ReferenceIndex
 from book_maker import translation_metadata as tmeta
 from book_maker.redaction import redact
 from book_maker.session_context import handoff_path
@@ -1359,6 +1361,7 @@ class EPUBBookLoader(BaseBookLoader):
                         "prompt": self._resolved_prompt(),
                         "model": self._configured_models(),
                         "glossary": self._pinned_glossary_lines(),
+                        "reference_context_version": REFERENCE_CONTEXT_VERSION,
                         "prompt_policy_version": PROMPT_POLICY_VERSION,
                         "contamination_detector_version": CONTAMINATION_DETECTOR_VERSION,
                         "retranslation_policy_version": RETRANSLATION_POLICY_VERSION,
@@ -1967,6 +1970,11 @@ class EPUBBookLoader(BaseBookLoader):
             max_units=self.batch_units,
             keep_classes=self._plan_css.keep_classes,
         )
+        if not hasattr(self, "_reference_index"):
+            self._reference_index = ReferenceIndex(self.origin_book)
+        for unit in fp.units:
+            unit.references = self._reference_index.for_unit(unit)
+            unit.token_count = None
         return fp
 
     def _plan_partition(self, item, consume=False):
@@ -2386,11 +2394,12 @@ class EPUBBookLoader(BaseBookLoader):
             # A chunk of one is not a batch: it goes through `translate`,
             # which is the bottom of the ladder and the only rung with
             # nothing left to divide.
-            result = (
-                [translator.translate(texts[0])]
-                if len(texts) == 1
-                else translator.translate_list(texts)
-            )
+            with reference_scope(units):
+                result = (
+                    [translator.translate(texts[0])]
+                    if len(texts) == 1
+                    else translator.translate_list(texts)
+                )
         except BatchMismatch as e:
             # Not an error: the contract working. Say what happened once,
             # then divide.
@@ -2622,7 +2631,8 @@ class EPUBBookLoader(BaseBookLoader):
         measured case, which is how the fault reached the book.
         """
         if len(texts) == 1:
-            t = translator.translate(texts[0])
+            with reference_scope(units):
+                t = translator.translate(texts[0])
             if t is None:
                 raise RuntimeError(
                     "`t_text` is None: your translation model is not working as expected."
@@ -3876,6 +3886,14 @@ class EPUBBookLoader(BaseBookLoader):
             if not is_our_colophon(item)
         ]
         chapter_plans = self._build_translation_plan(document_items, trans_taglist)
+        self._review_jobs = [job for plan in chapter_plans for job in plan.jobs]
+        self._review_markers = {
+            job.job_id: {
+                token: node.get_text() for token, node in job.unit.markers.items()
+            }
+            for job in self._review_jobs
+            if job.unit is not None
+        }
         self._planned_job_ids = [
             job.job_id for plan in chapter_plans for job in plan.jobs
         ]
@@ -4064,6 +4082,7 @@ class EPUBBookLoader(BaseBookLoader):
                 self.translate_model.batch()
             else:
                 self._write_book(f"{name}_bilingual.epub", new_book)
+                self._write_review_handoff(f"{name}_bilingual.epub")
                 self.announce_saved_book(f"{name}_bilingual.epub")
         except KeyboardInterrupt as e:
             print(e)
@@ -4108,6 +4127,54 @@ class EPUBBookLoader(BaseBookLoader):
             # the run failed and there is no output book; exiting 0 would
             # tell every caller the opposite
             sys.exit(1)
+
+    def _write_review_handoff(self, output_path):
+        """Source-bound unit identities and references; external to the EPUB, never credentials."""
+        if not self._plan_mode:
+            return
+        source_hash = file_sha256(self.epub_name)
+        units = []
+        for job in self._review_jobs:
+            unit = job.unit
+            if unit is None:
+                continue
+            target = (
+                self.p_to_save[job.global_index]
+                if job.global_index < len(self.p_to_save)
+                else None
+            )
+            markers = self._review_markers.get(job.job_id, {})
+            if target is not None:
+                target = reconcile_markers(unit.text, target, list(markers))
+                for token, text in markers.items():
+                    target = target.replace(token, text)
+            identity = f"{source_hash}:{unit.file_name}:{unit.ordinal}:{unit.text}"
+            units.append(
+                {
+                    "id": hashlib.sha256(identity.encode()).hexdigest(),
+                    "member": unit.file_name,
+                    "ordinal": unit.ordinal,
+                    "source": unit.text,
+                    "target": target,
+                    "references": unit.references,
+                }
+            )
+        payload = {
+            "schema": "bbm-review-handoff-1",
+            "reference_context_version": REFERENCE_CONTEXT_VERSION,
+            "references_supported": bool(
+                getattr(self.translate_model, "SUPPORTS_REFERENCE_CONTEXT", False)
+            ),
+            "source_sha256": source_hash,
+            "target_sha256": file_sha256(output_path),
+            "units": units,
+        }
+        destination = Path(output_path).with_suffix(".review.json")
+        temporary = destination.with_suffix(".json.tmp")
+        temporary.write_text(
+            json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+        temporary.replace(destination)
 
     def load_state(self):
         try:

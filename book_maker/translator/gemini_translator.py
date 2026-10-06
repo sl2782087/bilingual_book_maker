@@ -1,3 +1,4 @@
+from ..reference_context import reference_preamble
 import json
 import re
 import time
@@ -131,6 +132,8 @@ class Gemini(Base):
     Google gemini translator
     """
 
+    SUPPORTS_REFERENCE_CONTEXT = True
+
     DEFAULT_PROMPT = "Please help me to translate,`{text}` to {language}, please return only translated content not include the origin text"
 
     # Configuration constants
@@ -258,7 +261,8 @@ class Gemini(Base):
         KeyError here.
         """
         return self._fold_standing_instructions(
-            self.prompt.format(text=text, language=self.language, crlf="\n")
+            reference_preamble(text)
+            + self.prompt.format(text=text, language=self.language, crlf="\n")
         )
 
     def _extract_translation_text(self, response_text: str) -> str:

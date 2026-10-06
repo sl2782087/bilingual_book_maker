@@ -210,6 +210,17 @@ class OfflineLLM(OfflineTranslator):
 
 FORMAT_DICT["google"] = OfflineTranslator
 # The openai format too: it is the default route, so the contract tests for
-# what a bare command does have no other way to stay offline.
+# what a bare command does have no other way to stay offline. Its compatible
+# vendor formats are exercised by the request-extras CLI tests as well.
 FORMAT_DICT["openai"] = OfflineLLM
+
+
+class OfflineVendorLLM(OfflineLLM):
+    # Retain the real compatible routes' capability so CLI format and EPUB
+    # refusal gates run in the same order before any Batch API method is used.
+    SUPPORTS_BATCH_API = True
+
+
+for _format in ("groq", "xai", "litellm"):
+    FORMAT_DICT[_format] = OfflineVendorLLM
 ROUTE_DICT["orcarouter"] = OfflineLLM

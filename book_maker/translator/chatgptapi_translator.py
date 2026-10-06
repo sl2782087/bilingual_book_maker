@@ -410,6 +410,8 @@ class ChatGPTAPI(Base):
     # FORMAT_DEFAULT_BASES so that --api_format alone is a complete route.
     DEFAULT_API_BASE = None
 
+    SUPPORTS_REFERENCE_CONTEXT = True
+
     SUPPORTS_SESSION_CONTEXT = True
     SUPPORTS_PARALLEL_CONTEXT = True
     SUPPORTS_BATCH_API = True
